@@ -17,7 +17,7 @@ export class TransactionService {
   ) {}
 
   async create(createTransactionDto: CreateTransactionDto, userId?: number) {
-    const { items, customer, ...transactionData } = createTransactionDto;
+    const { items, customer, payments, ...transactionData } = createTransactionDto;
 
     // User role ni tekshirish - endi frontend da tanlanadi
     if (userId) {
@@ -104,6 +104,25 @@ export class TransactionService {
     const remainingWithInterest = remainingPrincipal + interestAmount;
     const finalTotalOnce = upfrontPayment + remainingWithInterest;
 
+    // For simple sales (CASH/CARD/TERMINAL), validate optional payments breakdown
+    const simplePaymentTypes: PaymentType[] = [PaymentType.CASH, PaymentType.CARD, PaymentType.TERMINAL];
+    let paymentsData: { method: string; amount: number }[] = [];
+    if (Array.isArray(payments) && payments.length > 0) {
+      paymentsData = payments
+        .map((p) => ({
+          method: String(p.method || '').toUpperCase(),
+          amount: Number(p.amount || 0) || 0,
+        }))
+        .filter((p) => p.amount > 0 && ['CASH', 'CARD', 'TERMINAL', 'TOVAR'].includes(p.method));
+
+      const totalPayments = paymentsData.reduce((sum, p) => sum + p.amount, 0);
+      const roundedTotal = Math.round(computedTotal);
+      const roundedPayments = Math.round(totalPayments);
+      if (roundedTotal !== roundedPayments) {
+        throw new BadRequestException(`To'lovlar yig'indisi mahsulotlar summasiga teng emas. Mahsulotlar jami: ${roundedTotal}, to'lovlar jami: ${roundedPayments}`);
+      }
+    }
+
     // Transaction yaratish
     const { cashierId, ...cleanTransactionData } = transactionData as any;
     const transaction = await this.prisma.transaction.create({
@@ -138,7 +157,19 @@ export class TransactionService {
             creditPercent: item.creditPercent,
             monthlyPayment: item.monthlyPayment || this.calculateMonthlyPayment(item)
           }))
-        }
+        },
+        ...(paymentsData.length > 0
+          ? {
+              payments: {
+                createMany: {
+                  data: paymentsData.map((p) => ({
+                    method: p.method,
+                    amount: p.amount,
+                  })),
+                },
+              },
+            }
+          : {}),
       },
       include: {
         customer: true,
@@ -149,7 +180,8 @@ export class TransactionService {
             product: true
           }
         },
-        paymentSchedules: true
+        paymentSchedules: true,
+        payments: true,
       }
     });
 
@@ -454,6 +486,7 @@ export class TransactionService {
             product: true,
           },
         },
+        payments: true,
       },
       orderBy: { createdAt: 'desc' },
       skip: parsedLimit ? (parsedPage - 1) * parsedLimit : 0,
@@ -609,7 +642,8 @@ export class TransactionService {
         paymentSchedules: {
           orderBy: { month: 'asc' },
           include: { paidBy: true }
-        }
+        },
+        payments: true,
       }
     });
 

@@ -77,6 +77,15 @@ export class TransactionItemDto {
   total?: number; // Total amount for this item
 }
 
+export class PaymentBreakdownDto {
+  @IsString()
+  method: 'CASH' | 'CARD' | 'TERMINAL';
+
+  @IsNumber()
+  @Min(0)
+  amount: number;
+}
+
 export class CreateTransactionDto {
   @IsOptional()
   @IsNumber()
@@ -160,6 +169,18 @@ export class CreateTransactionDto {
   @ValidateNested({ each: true })
   @Type(() => TransactionItemDto)
   items: TransactionItemDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PaymentBreakdownDto)
+  payments?: PaymentBreakdownDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PaymentBreakdownDto)
+  paymentBreakdowns?: PaymentBreakdownDto[];
 
   // Validationni service da qilish maqsadga muvofiq
 }

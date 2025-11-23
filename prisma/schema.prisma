@@ -394,6 +394,8 @@ model Transaction {
   tasks            Task[]
   // Back relation to defective logs linked to this transaction
   defectiveLogs    DefectiveLog[]
+  // Per-transaction payment breakdown (cash/card/terminal for simple sales)
+  payments         TransactionPayment[]
 
   @@index([customerId])
   @@index([userId])
@@ -424,6 +426,18 @@ model TransactionItem {
 
   transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   product     Product?    @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+}
+
+model TransactionPayment {
+  id            Int      @id @default(autoincrement())
+  transactionId Int
+  method        String   // CASH, CARD or TERMINAL
+  amount        Float
+  createdAt     DateTime @default(now())
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
 }
 
 model ProductTransfer {

@@ -116,6 +116,7 @@ export class CashierReportService {
         items: true,
         customer: true,
         paymentSchedules: true,
+        payments: true,
       },
     });
 
@@ -174,39 +175,59 @@ export class CashierReportService {
     let defectiveMinus = 0;
 
     // Process transactions
-    for (const transaction of transactions) {
+    for (const transaction of transactions as any[]) {
       const finalTotal = Number(transaction.finalTotal || transaction.total || 0);
       const amountPaid = Number(transaction.amountPaid || 0);
       const downPayment = Number(transaction.downPayment || 0);
       const upfront = ['CREDIT', 'INSTALLMENT'].includes(transaction.paymentType || '') ? amountPaid : 0;
 
-      switch (transaction.paymentType || '') {
-        case 'CASH':
-          cashTotal += finalTotal;
-          break;
-        case 'CARD':
-          cardTotal += finalTotal;
-          break;
-        case 'CREDIT':
-          creditTotal += finalTotal;
-          upfrontTotal += upfront;
-          if (transaction.upfrontPaymentType === 'CASH') {
-            upfrontCash += upfront;
-          } else if (transaction.upfrontPaymentType === 'CARD' || transaction.upfrontPaymentType === 'TERMINAL') {
-            // TERMINAL upfront payments are accounted as card
-            upfrontCard += upfront;
+      const paymentsArr = Array.isArray(transaction.payments) ? transaction.payments : [];
+      const hasSplitPayments = paymentsArr.length > 0;
+
+      if (hasSplitPayments) {
+        // Use split payments for simple sales
+        for (const p of paymentsArr) {
+          const amt = Number(p.amount || 0);
+          if (!amt || Number.isNaN(amt)) continue;
+          const m = String(p.method || '').toUpperCase();
+          if (m === 'CASH') cashTotal += amt;
+          else if (m === 'CARD') cardTotal += amt;
+          else if (m === 'TERMINAL') {
+            // Terminal payments should go to non-cash (account) bucket
+            // In aggregated cashier report we don't have a separate field,
+            // so we treat them as card-equivalent, same as elsewhere.
+            cardTotal += amt;
           }
-          break;
-        case 'INSTALLMENT':
-          installmentTotal += finalTotal;
-          upfrontTotal += upfront;
-          if (transaction.upfrontPaymentType === 'CASH') {
-            upfrontCash += upfront;
-          } else if (transaction.upfrontPaymentType === 'CARD' || transaction.upfrontPaymentType === 'TERMINAL') {
-            // TERMINAL upfront payments are accounted as card
-            upfrontCard += upfront;
-          }
-          break;
+        }
+      } else {
+        switch (transaction.paymentType || '') {
+          case 'CASH':
+            cashTotal += finalTotal;
+            break;
+          case 'CARD':
+            cardTotal += finalTotal;
+            break;
+          case 'CREDIT':
+            creditTotal += finalTotal;
+            upfrontTotal += upfront;
+            if (transaction.upfrontPaymentType === 'CASH') {
+              upfrontCash += upfront;
+            } else if (transaction.upfrontPaymentType === 'CARD' || transaction.upfrontPaymentType === 'TERMINAL') {
+              // TERMINAL upfront payments are accounted as card
+              upfrontCard += upfront;
+            }
+            break;
+          case 'INSTALLMENT':
+            installmentTotal += finalTotal;
+            upfrontTotal += upfront;
+            if (transaction.upfrontPaymentType === 'CASH') {
+              upfrontCash += upfront;
+            } else if (transaction.upfrontPaymentType === 'CARD' || transaction.upfrontPaymentType === 'TERMINAL') {
+              // TERMINAL upfront payments are accounted as card
+              upfrontCard += upfront;
+            }
+            break;
+        }
       }
 
       // Calculate sold quantity and amount
