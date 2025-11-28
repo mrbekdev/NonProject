@@ -333,8 +333,15 @@ export class DefectiveLogService {
 
                 // Delete all bonuses tied to this transaction (sales bonus, penalty, updates)
                 await (prisma as any).bonus.deleteMany({ where: { transactionId: tx.id } });
-                // Also reset any extraProfit stored on the transaction
-                await prisma.transaction.update({ where: { id: tx.id }, data: { extraProfit: 0 } });
+                // Adjust extraProfit proportionally based on returned quantity
+                const originalProfit = tx.extraProfit || 0;
+                const originalQty = Number(orig.quantity) + Number(quantity);
+                const proportionalProfit = originalProfit * (Number(quantity) / originalQty);
+                const newProfit = Math.max(0, originalProfit - proportionalProfit);
+                await prisma.transaction.update({ 
+                  where: { id: tx.id }, 
+                  data: { extraProfit: newProfit } 
+                });
               }
             }
 
@@ -388,12 +395,6 @@ export class DefectiveLogService {
             }
             
             // Recalculate totals (fast query)
-            const newItems = await prisma.transactionItem.findMany({ where: { transactionId: tx.id } });
-            const newTotal = newItems.reduce((s, it) => s + it.total, 0);
-            await prisma.transaction.update({
-              where: { id: tx.id },
-              data: { total: newTotal, finalTotal: newTotal }
-            });
 
             // Set recalc flag (run after transaction)
             if (tx.paymentType === 'CREDIT' || tx.paymentType === 'INSTALLMENT') {
