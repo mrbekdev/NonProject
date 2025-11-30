@@ -273,6 +273,7 @@ model Product {
   branchId          Int
   categoryId        Int
   marketPrice       Float?
+  unitType         String 
   bonusPercentage   Float?                    @default(0) // Bonus foizi
   months            String?                   // Oylar soni (masalan: 001, 002, 012)
   isDeleted         Boolean                   @default(false) // Soft delete uchun

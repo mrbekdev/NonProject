@@ -401,8 +401,6 @@ export class DefectiveLogService {
               shouldRecalculate = true;
               recalcForTxId = tx.id;
             }
-
-            // Skip recomputing bonuses on return: we already removed all bonuses above for this transaction
           }
         }
       }

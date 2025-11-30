@@ -37,6 +37,16 @@ async create(
   userId: number,
   prismaClient: PrismaClient | Prisma.TransactionClient = this.prisma,
 ) {
+  // Convert quantity to grams if unitType is KG
+  const inputQuantity = Number(createProductDto.quantity);
+  if (isNaN(inputQuantity)) {
+    throw new BadRequestException('Invalid quantity value');
+  }
+  
+  const quantity = createProductDto.unitType === 'KG' 
+    ? Math.round(inputQuantity)  // Convert KG to grams for storage
+    : Math.round(inputQuantity);
+
   const product = await prismaClient.product.create({
     data: {
       name: createProductDto.name,
@@ -47,8 +57,9 @@ async create(
       marketPrice: createProductDto.marketPrice,
       model: createProductDto.model,
       months: createProductDto.months,
-      initialQuantity: createProductDto.quantity,
-      quantity: createProductDto.quantity,
+      unitType: createProductDto.unitType || 'PIECE',
+      initialQuantity: quantity,
+      quantity: quantity,
       status: createProductDto.status || 'IN_STORE',
       defectiveQuantity: 0,
       bonusPercentage: createProductDto.bonusPercentage || 0,
@@ -198,20 +209,47 @@ async update(
   const isMarketPriceUpdated = updateProductDto.marketPrice !== undefined && updateProductDto.marketPrice !== product.marketPrice;
   const isBonusUpdated = updateProductDto.bonusPercentage !== undefined && updateProductDto.bonusPercentage !== product.bonusPercentage;
 
+  // Handle quantity conversion based on unitType
+  let quantity = product.quantity;
+  if (updateProductDto.quantity !== undefined) {
+    // Convert input to number and handle KG conversion if needed
+    const inputQuantity = Number(updateProductDto.quantity);
+    if (isNaN(inputQuantity)) {
+      throw new BadRequestException('Invalid quantity value');
+    }
+    
+    quantity = updateProductDto.unitType === 'KG' 
+      ? Math.round(inputQuantity * 1000)  // Convert KG to grams for storage
+      : Math.round(inputQuantity);
+      
+  } else if (updateProductDto.unitType && updateProductDto.unitType !== product.unitType) {
+    // If only unitType is changing, convert the existing quantity
+    if (updateProductDto.unitType === 'KG' && product.unitType === 'PIECE') {
+      // Converting from pieces to grams (multiply by 1000)
+      quantity = Math.round(quantity * 1000);
+    } else if (updateProductDto.unitType === 'PIECE' && product.unitType === 'KG') {
+      // Converting from grams to pieces (divide by 1000)
+      quantity = Math.round(quantity / 1000);
+    }
+  }
+
+  const updateData = {
+    name: updateProductDto.name,
+    categoryId: updateProductDto.categoryId,
+    branchId: updateProductDto.branchId,
+    price: updateProductDto.price,
+    marketPrice: updateProductDto.marketPrice,
+    model: updateProductDto.model,
+    unitType: updateProductDto.unitType,
+    months: updateProductDto.months,
+    status: updateProductDto.status,
+    quantity: quantity,
+    bonusPercentage: updateProductDto.bonusPercentage,
+  };
+
   const updatedProduct = await prismaClient.product.update({
     where: { id },
-    data: {
-      name: updateProductDto.name,
-      categoryId: updateProductDto.categoryId,
-      branchId: updateProductDto.branchId,
-      price: updateProductDto.price,
-      marketPrice: updateProductDto.marketPrice,
-      model: updateProductDto.model,
-      months: updateProductDto.months,
-      status: updateProductDto.status,
-      quantity: updateProductDto.quantity,
-      bonusPercentage: updateProductDto.bonusPercentage,
-    },
+    data: updateData,
   });
 
   // If price, marketPrice or bonusPercentage is updated, sync with all products having same name and model
@@ -682,6 +720,7 @@ return this.prisma.$transaction(async (tx) => {
       marketPrice: row['marketPrice'] ? Number(row['marketPrice']) : undefined,
       model: row['model'] ? String(row['model']) : undefined,
       months: row['months'] ? String(row['months']) : undefined,
+      unitType: row['unitType'] ? String(row['unitType']) : undefined,
       description: row['description'] ? String(row['description']) : undefined,
       branchId: fromBranchId,
       categoryId: categoryId,

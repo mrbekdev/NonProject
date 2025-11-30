@@ -29,6 +29,10 @@ export class UpdateProductDto {
   @IsOptional()
   branchId?: number;
 
+  @IsString()
+  @IsOptional()
+  unitType?:string;
+
   @ApiProperty({ enum: ProductStatus, required: false })
   @IsEnum(ProductStatus)
   @IsOptional()
