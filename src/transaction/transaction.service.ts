@@ -125,66 +125,95 @@ export class TransactionService {
 
     // Transaction yaratish
     const { cashierId, ...cleanTransactionData } = transactionData as any;
-    const transaction = await this.prisma.transaction.create({
-      data: {
-        ...cleanTransactionData,
-        customerId,
-        userId: createdByUserId || null, // yaratgan foydalanuvchi
-        soldByUserId: soldByUserId || null, // sotgan kassir
-        upfrontPaymentType: (transactionData as any).upfrontPaymentType || 'CASH', // Default to CASH if not specified
-        termUnit: (transactionData as any).termUnit || 'MONTHS', // Default to MONTHS if not specified
-        // Ensure totals are consistent and interest is applied once at sale time
-        total: computedTotal,
-        finalTotal: finalTotalOnce,
-        remainingBalance: remainingWithInterest,
-        // Kunlik bo'lib to'lash uchun qo'shimcha ma'lumotlar
-        ...((transactionData as any).termUnit === 'DAYS' ? {
-          days: (transactionData as any).days || 0,
-          months: 0 // Kunlik bo'lib to'lashda oylar 0
-        } : {
-          months: (transactionData as any).months || 0,
-          days: 0 // Oylik bo'lib to'lashda kunlar 0
-        }),
-        items: {
-          create: items.map(item => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            price: item.price,
-            sellingPrice: item.sellingPrice || item.price, // Use selling price if provided, otherwise use price
-            originalPrice: item.originalPrice || item.price, // Use original price if provided, otherwise use price
-            total: item.total || (item.price * item.quantity), // Use provided total or calculate
-            creditMonth: item.creditMonth,
-            creditPercent: item.creditPercent,
-            monthlyPayment: item.monthlyPayment || this.calculateMonthlyPayment(item)
-          }))
-        },
-        ...(paymentsData.length > 0
-          ? {
-              payments: {
-                createMany: {
-                  data: paymentsData.map((p) => ({
-                    method: p.method,
-                    amount: p.amount,
-                  })),
-                },
-              },
-            }
-          : {}),
+    
+    // Generate a unique reference if not provided
+    const reference = cleanTransactionData.reference || `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+// In transaction.service.ts, modify the transaction creation part (around line 128-186):
+// In transaction.service.ts, update the transaction creation part
+const transaction = await this.prisma.$transaction(async (prisma) => {
+  // Remove all ID fields that should be relations
+  const {
+    fromBranchId,
+    soldByUserId,
+    userId,
+    customerId: _customerId, // We'll use customerId separately
+    ...transactionDataWithoutIds
+  } = cleanTransactionData;
+
+  // Create the transaction with all items
+  const newTransaction = await prisma.transaction.create({
+    data: {
+      ...transactionDataWithoutIds, // Use the cleaned data
+      reference,
+      paymentType: cleanTransactionData.paymentType === 'MIXED' ? 'CASH' : cleanTransactionData.paymentType,
+      customer: {
+        connect: { id: customerId }
       },
-      include: {
-        customer: true,
-        user: true,
-        soldBy: true,
-        items: {
-          include: {
-            product: true
-          }
+      user: createdByUserId ? { connect: { id: createdByUserId } } : undefined,
+      soldBy: soldByUserId ? { connect: { id: soldByUserId } } : undefined,
+      fromBranch: fromBranchId ? { connect: { id: fromBranchId } } : undefined,
+      ...(cleanTransactionData.paymentType !== 'MIXED' && {
+        upfrontPaymentType: (transactionData as any).upfrontPaymentType || 'CASH'
+      }),
+      termUnit: (transactionData as any).termUnit || 'MONTHS',
+      total: computedTotal,
+      finalTotal: finalTotalOnce,
+      remainingBalance: remainingWithInterest,
+      status: 'COMPLETED',
+      // Create all items in a single transaction
+      items: {
+        create: items.map(item => ({
+          product: { connect: { id: item.productId } },
+          quantity: item.quantity,
+          price: item.price,
+          sellingPrice: item.sellingPrice || item.price,
+          originalPrice: item.originalPrice || item.price,
+          total: item.total || (item.price * item.quantity),
+          creditMonth: item.creditMonth,
+          creditPercent: item.creditPercent,
+          monthlyPayment: item.monthlyPayment || this.calculateMonthlyPayment(item)
+        }))
+      },
+      // Include payments if they exist
+      ...(paymentsData.length > 0 && {
+        payments: {
+          create: paymentsData.map((p) => ({
+            method: p.method,
+            amount: p.amount
+          }))
+        }
+      }),
+    },
+    include: {
+      customer: true,
+      user: true,
+      soldBy: true,
+      fromBranch: true,
+      items: {
+        include: {
+          product: true
+        }
+      },
+      paymentSchedules: true,
+      payments: true,
+    }
+  });
+
+  // Update product quantities
+  for (const item of items) {
+    await prisma.product.update({
+      where: { id: item.productId },
+      data: {
+        quantity: {
+          decrement: item.quantity
         },
-        paymentSchedules: true,
-        payments: true,
+        status: 'SOLD'
       }
     });
+  }
 
+  return newTransaction;
+});
     // Kredit yoki Bo'lib to'lash bo'lsa, to'lovlar jadvalini yaratish
     if (transaction.paymentType === PaymentType.CREDIT || transaction.paymentType === PaymentType.INSTALLMENT) {
       // Kunlik yoki oylik to'lovlarni tekshirish

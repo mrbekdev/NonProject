@@ -364,6 +364,7 @@ model Transaction {
   amountPaid            Float?
   downPayment           Float?
   remainingBalance      Float?
+  reference String? @unique
   receiptId             String?
   description           String?
   updatedById           Int?
