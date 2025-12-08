@@ -17,8 +17,8 @@ import { CurrencyExchangeRateModule } from './currency-exchange-rate/currency-ex
 import { DailyRepaymentModule } from './daily-repayment/daily-repayment.module';
 import { CreditRepaymentModule } from './credit-repayment/credit-repayment.module';
 import { CashierReportModule } from './cashier-report/cashier-report.module';
-import { BonusModule } from './bonus/bonus.module';
-import { TransactionBonusProductModule } from './transaction-bonus-product/transaction-bonus-product.module';
+
+
 import { WorkScheduleModule } from './work-schedule/work-schedule.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { UserBranchAccessModule } from './user-branch-access/user-branch-access.module';
@@ -42,8 +42,8 @@ import { DailyExpenseModule } from './daily-expense/daily-expense.module';
     DailyRepaymentModule, 
     CreditRepaymentModule, 
     CashierReportModule, 
-    BonusModule, 
-    TransactionBonusProductModule, 
+
+
     WorkScheduleModule, 
     AttendanceModule,
     UserBranchAccessModule,

@@ -156,7 +156,7 @@ model Branch {
   cashierReports   CashierReport[]
   DailyRepayment   DailyRepayment[]
   CreditRepayment  CreditRepayment[]
-  bonuses          Bonus[]
+
   attendanceDays   AttendanceDay[]
   attendanceEvents AttendanceEvent[]
 
@@ -194,13 +194,12 @@ model User {
   creditRepayments    CreditRepayment[]
   cashierReports      CashierReport[]        @relation("CashierReports")
   exchangeRates       CurrencyExchangeRate[]
-  bonuses             Bonus[]                @relation("UserBonuses")
-  createdBonuses      Bonus[]                @relation("BonusCreatedBy")
+
   attendanceDays      AttendanceDay[]
   attendanceEvents    AttendanceEvent[]
   faceTemplates       FaceTemplate[]
   Transaction         Transaction[]
-  auditTasks          Task[]                @relation("TaskAuditor")
+
 
   @@index([phone])
   @@index([branchId])
@@ -218,6 +217,13 @@ model UserBranchAccess {
   @@unique([userId, branchId])
   @@index([userId])
   @@index([branchId])
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
 }
 
 enum UserStatus {
@@ -282,10 +288,11 @@ model Product {
   updatedAt         DateTime?                 @updatedAt
   branch            Branch                    @relation(fields: [branchId], references: [id], onDelete: Cascade)
   category          Category                  @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  transactions      TransactionItem[]
-  DefectiveLog      DefectiveLog[]
-  ProductTransfer   ProductTransfer[]
-  bonusProducts     TransactionBonusProduct[]
+  transactions            TransactionItem[]
+  DefectiveLog            DefectiveLog[]
+  ProductTransfer         ProductTransfer[]
+  transactionBonusProducts TransactionBonusProduct[]
+
 
   @@unique([barcode, branchId], name: "barcode_branchId")
   @@index([isDeleted])
@@ -387,13 +394,14 @@ model Transaction {
   toBranch         Branch?                   @relation("ToBranch", fields: [toBranchId], references: [id], onDelete: Cascade)
   updatedBy        User?                     @relation(fields: [updatedById], references: [id])
   items            TransactionItem[]
-  paymentSchedules PaymentSchedule[]
-  PaymentRepayment PaymentRepayment[]
-  dailyRepayments  DailyRepayment[]
-  creditRepayments CreditRepayment[]
-  bonusProducts    TransactionBonusProduct[]
-  bonuses          Bonus[]
-  tasks            Task[]
+  paymentSchedules      PaymentSchedule[]
+  PaymentRepayment      PaymentRepayment[]
+  dailyRepayments       DailyRepayment[]
+  creditRepayments      CreditRepayment[]
+  transactionBonusProducts TransactionBonusProduct[]
+
+
+
   // Back relation to defective logs linked to this transaction
   defectiveLogs    DefectiveLog[]
   // Per-transaction payment breakdown (cash/card/terminal for simple sales)
@@ -623,69 +631,11 @@ model CurrencyExchangeRate {
   @@index([isActive])
 }
 
-model Bonus {
-  id            Int      @id @default(autoincrement())
-  userId        Int // Employee receiving the bonus
-  amount        Float // Bonus amount
-  reason        String // Reason for the bonus
-  description   String? // Optional detailed description
-  bonusProducts Json? // JSON array of bonus products given to customer
-  bonusDate     DateTime @default(now()) // Date when bonus was given
-  createdById   Int // Admin/Manager who created the bonus
-  branchId      Int? // Branch where bonus was given
-  transactionId Int? // Related transaction ID for sales bonuses
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
 
-  user        User         @relation("UserBonuses", fields: [userId], references: [id], onDelete: Cascade)
-  createdBy   User         @relation("BonusCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
-  branch      Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  transaction Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
 
-  @@index([userId])
-  @@index([createdById])
-  @@index([branchId])
-  @@index([bonusDate])
-  @@index([transactionId])
-}
 
-model TransactionBonusProduct {
-  id            Int      @id @default(autoincrement())
-  transactionId Int
-  productId     Int
-  quantity      Int
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
 
-  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  @@index([transactionId])
-  @@index([productId])
-}
-
-// Delivery Task workflow
-enum TaskStatus {
-  PENDING
-  ACCEPTED
-  DELIVERED
-}
-
-model Task {
-  id            Int        @id @default(autoincrement())
-  auditorId     Int?
-  transactionId Int
-  status        TaskStatus @default(PENDING)
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-
-  auditor     User?        @relation("TaskAuditor", fields: [auditorId], references: [id], onDelete: SetNull)
-  transaction Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-
-  @@index([auditorId])
-  @@index([transactionId])
-  @@index([status])
-}
 
 model WorkSchedule {
   id            Int      @id @default(autoincrement())
@@ -719,6 +669,21 @@ model FaceTemplate {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model TransactionBonusProduct {
+  id            Int      @id @default(autoincrement())
+  transactionId Int
+  productId     Int
+  quantity      Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  product     Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([productId])
 }
 
 // Single numeric value store

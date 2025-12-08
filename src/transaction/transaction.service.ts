@@ -4,7 +4,7 @@ import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { TransactionType, TransactionStatus, PaymentType } from '@prisma/client';
 import { CurrencyExchangeRateService } from '../currency-exchange-rate/currency-exchange-rate.service';
-import { BonusService } from '../bonus/bonus.service';
+
 import { TaskService } from '../task/task.service';
 
 @Injectable()
@@ -12,7 +12,7 @@ export class TransactionService {
   constructor(
     private prisma: PrismaService,
     private currencyExchangeRateService: CurrencyExchangeRateService,
-    private bonusService: BonusService,
+
     private taskService: TaskService,
   ) {}
 
@@ -199,18 +199,7 @@ const transaction = await this.prisma.$transaction(async (prisma) => {
     }
   });
 
-  // Update product quantities
-  for (const item of items) {
-    await prisma.product.update({
-      where: { id: item.productId },
-      data: {
-        quantity: {
-          decrement: item.quantity
-        },
-        status: 'SOLD'
-      }
-    });
-  }
+  // Product quantity updates will be handled by updateProductQuantities method below
 
   return newTransaction;
 });
@@ -1933,24 +1922,7 @@ const updatedTransaction = await this.prisma.transaction.update({
             });
           }
 
-          const bonusData = {
-            userId: soldByUserId,
-            branchId: branchContextId || undefined,
-            amount: bonusAmount,
-            reason: 'SALES_BONUS',
-            description: `${productInfo?.name || item.productName} (${productInfo?.model || '-'}) mahsulotini kelish narxidan yuqori bahoda sotgani uchun avtomatik bonus. Transaction ID: ${transaction.id}, Sotish narxi: ${sellingPrice.toLocaleString()} som, Kelish narxi: ${Math.round(costInUzs).toLocaleString()} som, Miqdor: ${quantity}, Bonus mahsulotlar umumiy qiymati: ${totalBonusProductsValue.toLocaleString()} som, Ajratilgan ulush: ${allocatedBonusProductsValue.toLocaleString()} som, Sof ortiqcha: ${netExtraAmount.toLocaleString()} som, Bonus foizi: ${bonusPercentage}%`,
-            bonusProducts: bonusProductsData.length > 0 ? bonusProductsData : null,
-            transactionId: transaction.id,
-            bonusDate: new Date().toISOString()
-          };
 
-          console.log(' Bonus yaratilmoqda:', bonusData);
-          await this.bonusService.create(bonusData, createdById || soldByUserId);
-
-          console.log(` BONUS YARATILDI: ${bonusAmount} som`);
-          console.log(`   Mahsulot: ${productInfo?.name || item.productName}`);
-          console.log(`   Sotuvchi: ${seller.username} (ID: ${soldByUserId})`);
-          console.log(`   Yaratuvchi: Kassir (ID: ${createdById})`);
         }
       }
 
@@ -2001,21 +1973,6 @@ const updatedTransaction = await this.prisma.transaction.update({
                 .join(' | ')
             : '';
 
-          const penaltyData = {
-            userId: soldByUserId,
-            branchId: branchContextId || undefined,
-            amount: -netDeficit, // manfiy summa
-            reason: 'SALES_PENALTY',
-            description: `Arzon (kelish narxidan past) sotuv uchun umumiy jarima. Transaction ID: ${transaction.id}. Umumiy sotish: ${sellingTotal.toLocaleString()} som, Bonus mahsulotlar qiymati: ${Math.round(totalBonusProductsValue).toLocaleString()} som, Umumiy kelish: ${Math.round(totalCostAll).toLocaleString()} som, Jami kamomad: ${netDeficit.toLocaleString()} som. Tafsilotlar: `
-              + negativeItems.map(n => `${n.item.productName || n.productInfo?.name} (${n.productInfo?.model || '-'}) qty=${n.quantity}, sotish=${n.sellingPrice}, kelish=${n.costInUzs}, zarar=${n.lossAmount}`).join(' | ')
-              + bonusProductsInfo,
-            bonusProducts: penaltyBonusProductsData.length > 0 ? penaltyBonusProductsData : null,
-            transactionId: transaction.id,
-            bonusDate: new Date().toISOString()
-          } as any;
-          console.log(' PENALTY BONUS yaratilmoqda:', penaltyData);
-          await this.bonusService.create(penaltyData, createdById || soldByUserId);
-          console.log(` PENALTY BONUS YARATILDI: ${-netDeficit} som (manfiy)`);
         } catch (e) {
           console.error(' Penalty bonus yaratishda xatolik:', e);
         }
