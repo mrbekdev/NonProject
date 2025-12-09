@@ -146,9 +146,7 @@ const transaction = await this.prisma.$transaction(async (prisma) => {
       ...transactionDataWithoutIds, // Use the cleaned data
       reference,
       paymentType: cleanTransactionData.paymentType === 'MIXED' ? 'CASH' : cleanTransactionData.paymentType,
-      customer: {
-        connect: { id: customerId }
-      },
+      customer: customerId ? { connect: { id: customerId } } : undefined,
       user: createdByUserId ? { connect: { id: createdByUserId } } : undefined,
       soldBy: soldByUserId ? { connect: { id: soldByUserId } } : undefined,
       fromBranch: fromBranchId ? { connect: { id: fromBranchId } } : undefined,
