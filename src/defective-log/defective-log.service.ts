@@ -332,7 +332,6 @@ export class DefectiveLogService {
                 }
 
                 // Delete all bonuses tied to this transaction (sales bonus, penalty, updates)
-                await (prisma as any).bonus.deleteMany({ where: { transactionId: tx.id } });
                 // Adjust extraProfit proportionally based on returned quantity
                 const originalProfit = tx.extraProfit || 0;
                 const originalQty = Number(orig.quantity) + Number(quantity);
